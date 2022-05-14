@@ -1188,9 +1188,22 @@ func (t *templateService) renderLaunchManifest(vmi *v1.VirtualMachineInstance, i
 		updateLivenessProbe(vmi, compute.LivenessProbe)
 	}
 
+	var networkListToResourceMap = make(map[string][]string)
 	for networkName, resourceName := range networkToResourceMap {
+		if val, ok := networkListToResourceMap[resourceName]; ok {
+			networkListToResourceMap[resourceName] = append(val, networkName)
+		} else {
+			networkListToResourceMap[resourceName] = []string{networkName}
+		}
 		varName := fmt.Sprintf("KUBEVIRT_RESOURCE_NAME_%s", networkName)
 		compute.Env = append(compute.Env, k8sv1.EnvVar{Name: varName, Value: resourceName})
+	}
+
+	// add an ordered list of the resources we have processed for use within pci address lookup
+	for k, v := range networkListToResourceMap {
+		envVarName := util.ResourceNameToEnvVar("KUBEVIRT_RESOURCE_CREATE_ORDER", k)
+		println("Environment: ", envVarName)
+		compute.Env = append(compute.Env, k8sv1.EnvVar{Name: envVarName, Value: strings.Join(v[:], ",")})
 	}
 
 	virtLauncherLogVerbosity := t.clusterConfig.GetVirtLauncherVerbosity()

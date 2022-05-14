@@ -20,6 +20,7 @@
 package sriov_test
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -27,6 +28,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	v1 "kubevirt.io/api/core/v1"
+	"kubevirt.io/kubevirt/pkg/util"
 	"kubevirt.io/kubevirt/pkg/virt-launcher/virtwrap/device/hostdevice/sriov"
 )
 
@@ -104,21 +106,48 @@ var _ = Describe("SRIOV PCI address pool", func() {
 		})
 	})
 
-	It("provides 2 addresses given 2xInterface, 1xResource, 2xPCI", func() {
-		resource := newResourceData("resource1", "0000:81:01.0", "0000:81:02.0")
+	It("provides 3 addresses given 3xInterface, 1xResource, 3xPCI", func() {
+		println("== begin")
+		resource := newResourceData("resource1", "0000:81:01.0", "0000:81:02.0", "0000:81:02.1")
 		net1 := newNetworkData("net1", resource)
 		net2 := newNetworkData("net2", resource)
-		env := []envData{net1.ResourceEnv, net1.DeviceEnv, net2.ResourceEnv}
+		net3 := newNetworkData("net3", resource)
+		env := []envData{
+			net1.ResourceEnv,
+			net1.DeviceEnv,
+			net2.ResourceEnv,
+			net3.ResourceEnv}
 		withEnvironmentContext(env, func() {
-			iface1 := newSRIOVInterface(net1.Name)
-			iface2 := newSRIOVInterface(net2.Name)
-			pool := sriov.NewPCIAddressPool([]v1.Interface{iface1, iface2})
 
-			Expect(pool.Pop(net1.Name)).To(Equal(net1.PCIAddresses[0]))
-			Expect(pool.Pop(net2.Name)).To(Equal(net1.PCIAddresses[1]))
-			expectPoolPopFailure(pool, net1.Name)
-			expectPoolPopFailure(pool, net2.Name)
+			iface1 := newSRIOVInterface(net3.Name)
+			iface2 := newSRIOVInterface(net2.Name)
+			iface3 := newSRIOVInterface(net1.Name)
+
+			pool := sriov.NewPCIAddressPool([]v1.Interface{iface1, iface2, iface3})
+
+			envVarName := util.ResourceNameToEnvVar("KUBEVIRT_RESOURCE_CREATE_ORDER", "intel.com/resource1_pool")
+			os.Setenv(envVarName, "net3,net2,net1")
+
+			for _, element := range os.Environ() {
+				variable := strings.Split(element, "=")
+				fmt.Println(variable[0], "=>", variable[1])
+			}
+
+			pop, _ := pool.Pop(net2.Name)
+
+			println("POP PETIE 2", pop)
+			pop, _ = pool.Pop(net1.Name)
+
+			println("POP PETIE 1", pop)
+			os.Unsetenv(envVarName)
+
+			//Expect(pool.Pop(net2.Name)).To(Equal(net1.PCIAddresses[0]))
+			//Expect(pool.Pop(net1.Name)).To(Equal(net1.PCIAddresses[1]))
+			//Expect(pool.Pop(net3.Name)).To(Equal(net1.PCIAddresses[2]))
+			//expectPoolPopFailure(pool, net1.Name)
+			//expectPoolPopFailure(pool, net2.Name)
 		})
+		println("== end")
 	})
 
 	It("provides 2 addresses given 2xInterface, 2xResource, 2xPCI", func() {

@@ -38,6 +38,7 @@ const resourcePrefix = "PCIDEVICE"
 // NewPCIAddressPool creates a PCI address pool based on the provided list of interfaces and
 // the environment variables that describe the SRIOV devices.
 func NewPCIAddressPool(ifaces []v1.Interface) *PCIAddressPool {
+	fmt.Println("IFACES ", ifaces)
 	pool := &PCIAddressPool{
 		networkToResource: make(map[string]string),
 	}
@@ -54,6 +55,7 @@ func (p *PCIAddressPool) loadResourcesNames(ifaces []v1.Interface) {
 			log.Log.Warningf("%s not set for SR-IOV interface %s", resourceEnvVarName, iface.Name)
 			continue
 		}
+		println("resource: ", resource)
 		p.networkToResource[iface.Name] = resource
 	}
 }
@@ -71,12 +73,14 @@ func (p *PCIAddressPool) loadResourcesAddresses() {
 // callers, whether they request an address for the same network or another
 // network that is backed by the same resourceName.
 func (p *PCIAddressPool) Pop(networkName string) (string, error) {
+	println("PCIAddressPool received networkName ", networkName)
 	resource, exists := p.networkToResource[networkName]
+	println("Resource: ", resource)
 	if !exists {
 		return "", fmt.Errorf("resource for SR-IOV network %s does not exist", networkName)
 	}
 
-	pciAddress, err := p.pool.Pop(resource)
+	pciAddress, err := p.pool.Pop(resource + "|" + networkName)
 	if err != nil {
 		return "", fmt.Errorf("failed to allocate SR-IOV PCI address for network %s: %v", networkName, err)
 	}
